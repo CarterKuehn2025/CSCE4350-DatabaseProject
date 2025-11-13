@@ -1,3 +1,4 @@
+import java.nio.file.*;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.sql.Connection;
@@ -108,47 +109,45 @@ public class main {
         }
     }
 
-    public static int showMenuAndGetSelection(String[] options) {
+    public static int showMenuAndGetSelection(String text, String[] options) {
         try {
-            // Build the whiptail command dynamically
-            StringBuilder cmdBuilder = new StringBuilder();
-            cmdBuilder.append("whiptail --title 'Fruit Picker' --menu 'Choose a fruit:' 15 50 6 ");
-
-            for (int i = 0; i < options.length; i++) {
-                // Tag = index+1, description = option name
-                cmdBuilder.append("\"").append(i + 1).append("\" \"").append(options[i]).append("\" ");
-            }
-
-            // Redirect stderr to stdout so we can capture the choice
-            cmdBuilder.append("3>&1 1>&2 2>&3");
-
-            // Use bash -c to run it
-            String[] cmd = {"bash", "-c", cmdBuilder.toString()};
-
-            ProcessBuilder pb = new ProcessBuilder(cmd);
-            Process process = pb.start();
-
-            // Capture output (the chosen tag)
-            BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream())
-            );
-            String choiceTag = reader.readLine();
-
-            int exitCode = process.waitFor();
-
-            if (exitCode == 0 && choiceTag != null) {
-                int choiceIndex = Integer.parseInt(choiceTag) - 1;
-                System.out.println("You chose: " + options[choiceIndex]);
-                return choiceIndex;
-            } else {
-                System.out.println("Cancelled or no choice made.");
-                return -1;
-            }
-
+            Path tempFile = Files.createTempFile("whiptail_choice_", ".txt");
+                StringBuilder cmd = new StringBuilder();
+                cmd.append("(");
+                cmd.append("whiptail --title 'Select Query' --menu 'Pick an option:' 15 120 6 ");
+                for (int i = 0; i < options.length; i++) {
+                    cmd.append("\"").append(i + 1).append("\" \"").append(options[i]).append("\" ");
+                }
+                cmd.append("3>&1 1>&2 2>&3");
+                cmd.append(") > ").append(tempFile.toAbsolutePath());
+                
+                ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd.toString());
+                pb.inheritIO();
+                Process process = pb.start();
+                process.waitFor();
+                
+                String result = Files.readString(tempFile).trim();
+                if(!result.isEmpty()) return Integer.parseInt(result) - 1;
         } catch (Exception e) {
             e.printStackTrace();
         }
         return -1;
+    }
+
+    public static void showTextBox(String text) {
+        try {
+            Path tempFile = Files.createTempFile("whiptail_output_", ".txt");
+            Files.writeString(tempFile, text); // preserves newlines and special chars
+
+            String cmd = "whiptail --title 'Output' --textbox " + tempFile.toAbsolutePath() + " 20 80";
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd);
+            pb.inheritIO(); // show menu interactively
+            Process process = pb.start();
+            process.waitFor();
+            Files.deleteIfExists(tempFile);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     // This just executes the string as SQL and returns the output. We can just make functions that use this funtion.
@@ -188,73 +187,73 @@ public class main {
         }
     }
 
+    public static String getInput(String description) {
+        // TODO Whiplash can do a text field page, figure out how to do that and get the value similar to how the selection value was gotten
+        return "3";
+    }
+
     public static void showOptionsAndGetSelectedForever() {
-            Scanner scanner = new Scanner(System.in);
-            while (true) {
-                showMenuAndGetSelection("Select which command would like to do:", { 
-                    "st 3 - Show SALES TRENDS for various brands over the past 3 years (can be any number).",
-                    "fvp 2.0L Engine - FIND VIN numbers for cars which were made with a given PART 2.0L Engine (can be any part).",
-                    "tb 2 1 - FIND The top 2 BRANDS by revinue in the past 1 year (can be any number of brands or years).",
-                    "fmb Convertibles - FIND the MONTH which has the BEST revinue for Convertibles (can be any vehicle type).",
-                    "ftatv F150 - FIND the dealers which have the TOP AVERAGE TIME a given VEHICLE model is kept (can be any model)."
-                });
-                System.out.print("Input ('exit' to exit): ");
-                String command = scanner.nextLine();
-                if (command.equalsIgnoreCase("exit")) {
-                    break;
-                } else if(command.startsWith("st")) {
-                    try {
-                        int years = Integer.parseInt(command.substring(3, command.length()));
-                        String result = execute(String.format(String.join("\n",
-                                "SELECT brand, SUM(salePrice) totalSales",
-                                "FROM vehicles",
-                                "NATURAL JOIN models",
-                                "WHERE timeKept <= %d",
-                                "GROUP BY brand",
-                                "ORDER BY totalSales;"
-                        ), years * 365));
-                        System.out.println(result);
-                    } catch (SQLException e) {
-                        System.out.println("SQL Error: " + e.getMessage());
-                    }
-                } else if(command.startsWith("fvp")) {
-                    
-                } else if(command.startsWith("tb")) {
-
-                } else if(command.startsWith("fmb")) {
-
-                } else if(command.startsWith("ftatv")) {
-
-                } else if(command.startsWith("sql")) { // for debugging. Ex: 'sql SELECT * FROM vehicles;'
-                    try {
-                        System.out.println(execute(command.substring(4, command.length())));
-                    } catch (SQLException e) {
-                        System.out.println("SQL Error: " + e.getMessage());
-                    }
-                } else {
-                    System.out.println("Invalid Command");
+        Scanner scanner = new Scanner(System.in);
+        //while (true) { // only do one iteration of selection so that the printed stuff can be seen for debugging
+            int selection = showMenuAndGetSelection("Select which command would like to do:", new String[] { 
+                "Show SALES TRENDS for various brands over the past 3 years (can be any number).",
+                    "FIND VIN numbers for cars which were made with a given PART 2.0L Engine (can be any part).",
+                    "FIND The top 2 BRANDS by revinue in the past 1 year (can be any number of brands or years).",
+                    "FIND the MONTH which has the BEST revinue for Convertibles (can be any vehicle type).",
+                    "FIND the dealers which have the TOP AVERAGE TIME a given VEHICLE model is kept (can be any model).",
+                    "exit"
+            });
+            System.out.println(selection);
+            if(selection == 0) {
+                try {
+                    int years = Integer.parseInt(getInput("Enter how many years"));
+                    String result = execute(String.format(String.join("\n",
+                                    "SELECT brand, SUM(salePrice) totalSales",
+                                    "FROM vehicles",
+                                    "NATURAL JOIN models",
+                                    "WHERE timeKept <= %d",
+                                    "GROUP BY brand",
+                                    "ORDER BY totalSales;"
+                                    ), years * 365));
+                    System.out.println(result);
+                    showTextBox(result);
+                } catch (SQLException e) {
+                    showTextBox("SQL Error: " + e.getMessage());
                 }
+            } else if(selection == 1) {
 
+            } else if(selection == 2) {
+
+            } else if(selection == 3) {
+
+            } else if(selection == 4) {
+
+            } else if(selection == 5) {
+                //break;
+            } else {
+                System.out.println("Invalid Command");
             }
+
+        //}
     }
 
     // this is just for testing, we wouldn't remove this and put options to select custom queries
     public static void getSQLFromInputForever() {
-            Scanner scanner = new Scanner(System.in);
-            while (true) {
-                System.out.println("Enter command:");
-                String command = scanner.nextLine();
-                if (command.equalsIgnoreCase("exit")) {
-                    break;
-                }
-
-                try {
-                    String result = execute(command);
-                    System.out.println(result);
-                } catch (SQLException e) {
-                    System.out.println("SQL Error: " + e.getMessage());
-                }
+        Scanner scanner = new Scanner(System.in);
+        while (true) {
+            System.out.println("Enter command:");
+            String command = scanner.nextLine();
+            if (command.equalsIgnoreCase("exit")) {
+                break;
             }
+
+            try {
+                String result = execute(command);
+                System.out.println(result);
+            } catch (SQLException e) {
+                System.out.println("SQL Error: " + e.getMessage());
+            }
+        }
     }
 
     public static void main(String[] args) {
