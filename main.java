@@ -261,9 +261,8 @@ public class main {
             connect();
             createTablesIfNotExists();
 
-            // had trouble getting this to compile on my end, just going to use the old method
-            // showOptionsAndGetSelectedForever();
-            getSQLFromInputForever();
+            showOptionsAndGetSelectedForever();
+            
         } catch (SQLException e) {
             System.out.println("Connection or setup error: " + e.getMessage());
             e.printStackTrace();
