@@ -17,9 +17,9 @@ public class main {
     // Connect once, globally
     public static void connect() throws SQLException {
         if (conn == null || conn.isClosed()) {
-            String url = "jdbc:mysql://localhost:3306/cars";
-            String user = "User1";
-            String password = "Password1";
+            String url = "jdbc:mysql://localhost:3306/csce4350_258_team6_proj";
+            String user = "EUID";
+            String password = "PROFILEID (login to myUNT to find)";
 
             conn = DriverManager.getConnection(url, user, password);
             System.out.println("Connected to database!");
@@ -261,7 +261,9 @@ public class main {
             connect();
             createTablesIfNotExists();
 
-            showOptionsAndGetSelectedForever();
+            // had trouble getting this to compile on my end, just going to use the old method
+            // showOptionsAndGetSelectedForever();
+            getSQLFromInputForever();
         } catch (SQLException e) {
             System.out.println("Connection or setup error: " + e.getMessage());
             e.printStackTrace();
