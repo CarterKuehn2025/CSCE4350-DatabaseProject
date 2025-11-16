@@ -15,11 +15,12 @@ public class main {
     private static Connection conn;
 
     // Connect once, globally
+    // uses local host bc it is intended to be ran on the cell machines
     public static void connect() throws SQLException {
         if (conn == null || conn.isClosed()) {
             String url = "jdbc:mysql://localhost:3306/csce4350_258_team6_proj";
-            String user = "EUID";
-            String password = "PROFILEID (login to myUNT to find)";
+            String user = "cgk0043";
+            String password = "11563328";
 
             conn = DriverManager.getConnection(url, user, password);
             System.out.println("Connected to database!");
@@ -28,17 +29,32 @@ public class main {
 
     public static void createTablesIfNotExists() throws SQLException {
         try (Statement stmt = conn.createStatement()) {
+            // brands table
             stmt.executeUpdate(String.join("\n", 
                 "CREATE TABLE IF NOT EXISTS brands (",
                     "brand VARCHAR(255) PRIMARY KEY",
                 ");"
             ));
 
+            // models table
             stmt.executeUpdate(String.join("\n",
                 "CREATE TABLE IF NOT EXISTS models (",
                     "model VARCHAR(255) PRIMARY KEY,",
-                    "brand VARCHAR(255),",
+                    "brand VARCHAR(255) NOT NULL,",
+                    "bodyStyle VARCHAR(255), ",
                     "FOREIGN KEY (brand) REFERENCES brands(brand)",
+                ");"
+            ));
+
+            // dealers table
+            stmt.executeUpdate(String.join("\n",
+                "CREATE TABLE IF NOT EXISTS dealers (",
+                    "dealerID VARCHAR(255) PRIMARY KEY,",
+                    "name VARCHAR(255) NOT NULL,",
+                    "address VARCHAR(255),",
+                    "city VARCHAR(255),",
+                    "state CHAR(2),",
+                    "zip VARCHAR(10)",
                 ");"
             ));
 
@@ -60,6 +76,7 @@ public class main {
                 ");"
             ));
 
+            // company productive plants table
             stmt.executeUpdate(String.join("\n",
                 "CREATE TABLE IF NOT EXISTS companyPlants (",
                     "plant VARCHAR(255),",
@@ -70,15 +87,19 @@ public class main {
                 ");"
             ));
 
+            // supplier table
             stmt.executeUpdate(String.join("\n",
                 "CREATE TABLE IF NOT EXISTS supplier (",
                     "supplier VARCHAR(255),",
                     "brandSupplier VARCHAR(255),",
+                    "address VARCHAR(255),",
+                    "phone VARCHAR(255),",
                     "PRIMARY KEY (supplier, brandSupplier),",
                     "FOREIGN KEY (brandSupplier) REFERENCES brands(brand)",
                 ");"
             ));
 
+            // customers table
             stmt.executeUpdate(String.join("\n",
                 "CREATE TABLE IF NOT EXISTS customers (",
                     "customerID VARCHAR(255) PRIMARY KEY,",
@@ -86,26 +107,47 @@ public class main {
                     "phoneNumb VARCHAR(255),",
                     "gender VARCHAR(50),",
                     "address VARCHAR(255),",
-                    "income VARCHAR(255),",
+                    "income DECIMAL(10,2),",
                     "isCompany BOOLEAN",
                 ");"
             ));
 
+            // vehicles table
             stmt.executeUpdate(String.join("\n",
                     "CREATE TABLE IF NOT EXISTS vehicles (",
                         "vin VARCHAR(255) PRIMARY KEY,",
                         "color VARCHAR(255),",
                         "engineType VARCHAR(255),",
                         "timeKept INT,",
+                        "dateAcquired DATE,",
+                        "dealerID VARCHAR(255),",
                         "customerID VARCHAR(255),",
                         "model VARCHAR(255),",
                         "salePrice INT,",
                         "FOREIGN KEY (color, model) REFERENCES colors(color, model),",
                         "FOREIGN KEY (engineType, model) REFERENCES engineTypes(engineType, model),",
                         "FOREIGN KEY (model) REFERENCES models(model),",
-                        "FOREIGN KEY (customerID) REFERENCES customers(customerID)",
+                        "FOREIGN KEY (customerID) REFERENCES customers(customerID),",
+                        "FOREIGN KEY (dealerID) REFERENCES dealers(dealerID)",
                     ");"
             ));
+
+            // sales table
+            stmt.executeUpdate(String.join("\n",
+                "CREATE TABLE IF NOT EXISTS sales (",
+                    "saleID INT AUTO_INCREMENT PRIMARY KEY,",
+                    "vin VARCHAR(255) NOT NULL,",
+                    "dealerID VARCHAR(255) NOT NULL,",
+                    "customerID VARCHAR(255) NOT NULL,",
+                    "saleDate DATE NOT NULL,",
+                    "salePrice INT NOT NULL,",
+                    "FOREIGN KEY (vin) REFERENCES vehicles(vin),",
+                    "FOREIGN KEY (dealerID) REFERENCES dealers(dealerID),",
+                    "FOREIGN KEY (customerID) REFERENCES customers(customerID)",
+                    ");"
+            ));
+
+            System.out.println("All tables created (if they did not exist)");
         }
     }
 
@@ -188,18 +230,58 @@ public class main {
     }
 
     public static String getInput(String description) {
-        // TODO Whiplash can do a text field page, figure out how to do that and get the value similar to how the selection value was gotten
-        return "3";
+        // implementing todo
+        // first, we need to build a command-line-safe command, so I'll escape any double quotes
+        // should keep bash from breaking
+        String safeDesc = description.replace("\"", "\\\"");
+
+        try {
+            // temp file pattern used above
+            Path tempFile = Files.createTempFile("whiptail_input_", ".txt");
+            
+            // building the whiptail command to feed into bash
+            // bash command, gives user inbox box, "10 60" = height/width, "3>&...>&3" redirects our file descriptor to stdout, which we pipe into the temp file
+            StringBuilder cmdLine = new StringBuilder();
+            cmdLine.append("(whiptail --title \"Input\" --inputbox \"").append(safeDesc).append("\" 10 60 3>&1 1>&2 2>&3");
+            cmdLine.append(") > ").append(tempFile.toAbsolutePath());
+
+            // now to use bash/process builder to run the command
+            ProcessBuilder userInputProcess = new ProcessBuilder("bash", "-c", cmdLine.toString());
+
+            // grab the terminal
+            userInputProcess.inheritIO();
+
+            // start and grab exit code
+            Process inputProcess = userInputProcess.start();
+            int exitCode = inputProcess.waitFor();
+
+            // check if user pressed ok (returns 0)
+            String result = "";
+            if(exitCode == 0) {
+                result = Files.readString(tempFile).trim();
+            }
+
+            // don't save file
+            Files.deleteIfExists(tempFile);
+
+            // return user input
+            // yay so fun java
+            return result;
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+            return "";
+        }
     }
 
     public static void showOptionsAndGetSelectedForever() {
         Scanner scanner = new Scanner(System.in);
         //while (true) { // only do one iteration of selection so that the printed stuff can be seen for debugging
             int selection = showMenuAndGetSelection("Select which command would like to do:", new String[] { 
-                "Show SALES TRENDS for various brands over the past 3 years (can be any number).",
+                "Show SALES TRENDS by brand over the past N years, given by year, month, week, gender, and income range",
                     "FIND VIN numbers for cars which were made with a given PART 2.0L Engine (can be any part).",
                     "FIND The top 2 BRANDS by revinue in the past 1 year (can be any number of brands or years).",
-                    "FIND the MONTH which has the BEST revinue for Convertibles (can be any vehicle type).",
+                    "FIND the MONTH which has the BEST revenue for a body style (defaults to Convertible).",
                     "FIND the dealers which have the TOP AVERAGE TIME a given VEHICLE model is kept (can be any model).",
                     "exit"
             });
@@ -225,9 +307,101 @@ public class main {
             } else if(selection == 2) {
 
             } else if(selection == 3) {
+                try {
+                    // get user input for body style to query for
+                    String bodyStyle = getInput("Enter vehicle body style (i.e. Convertible):");
+                    // default to convertible
+                    if (bodyStyle == null || bodyStyle.trim().isEmpty()) {
+                        bodyStyle = "Convertible";
+                    }
+                    else {
+                        // clean whitespace from user
+                        bodyStyle = bodyStyle.trim();
+                    }
+
+                    // bug fix, need to escape the single quotes otherwise SQL string is broken
+                    bodyStyle = bodyStyle.replace("'", "''");
+
+                    // query builds monthly sales for body style and we'll order by revenue
+                    // notes:
+                    // - learned you can define tables as char singletons, significantly cleans up the query
+                    // - we want sale year/month, units sold, and total sales, three of which are in sales
+                    // - so sales join (inner) on vehicles vin and models join on vehicles?
+                    // - then simple group by sale dates and order by total sales
+                    // - thank god for aliasing 
+                    // - !!! """...""" does not work to make a string, ig cell machines use an older version of java < 15
+                    String sqlQuery = 
+                        "Select\n" +
+                            "YEAR(s.saleDate) AS saleYear,\n" +
+                            "MONTH(s.saleDate) AS saleMonth,\n" +
+                            "COUNT(*) AS unitsSold,\n" +
+                            "SUM(s.salePrice) AS totalSales\n" +
+                        "FROM sales s\n" +
+                        "JOIN vehicles v ON s.vin = v.vin\n" +
+                        "JOIN models m ON v.model = m.model\n" +
+                        "WHERE m.bodyStyle = '" + bodyStyle + "'\n" +
+                        "GROUP BY YEAR(s.saleDate), MONTH(s.saleDate)\n" +
+                        "ORDER BY totalSales DESC;";
+
+                    // get the string
+                    String queryResult = execute(sqlQuery);
+                    showTextBox(queryResult);
+                }
+                catch (SQLException e) {
+                    showTextBox("SQL Error: " + e.getMessage());
+                }
 
             } else if(selection == 4) {
+                try {
+                    // need to allow for an optional filter, same getInput process for user
+                    String specificModel = getInput("Enter vehicle MODEL to filter by (exact name), or blank for all models:");
+                    // can still use bool logic similar to python, java just requires more method calls
+                    boolean filterByModel = specificModel != null && !specificModel.trim().isEmpty();
+                    if (filterByModel) {
+                        // user entered a model name, trim possible whitespace
+                        specificModel = specificModel.trim();
+                    }
 
+                    // same query assembly method for selection 3
+                    // notes:
+                    // - want average inventory time by dealer, then show dealers with highest
+                    // - base table will be sales again, easiest way I think to get saleDate, and we want vehicles table
+                    // - which has date acquired, I saw a query online that nests:
+                    //          - AVG(DATEDIFF(...)), which we can use to get the difference between sale date and date aquired
+                    // - we'll want the dealer ID and name as well for display
+                    // - welp here we go again thankful for aliasing/table char singles
+                    // - if a date acquired is null it might break the query, so I'll add a little clause for the end
+                    // - first bit is default not filtered by model
+                    String sqlQuery = 
+                        "Select\n" +
+                            "d.dealerID,\n" +
+                            "d.name,\n" +
+                            "AVG(DATEDIFF(s.saleDate, v.dateAcquired)) AS avgDaysInInventory,\n" +
+                            "COUNT(*) AS vehiclesSold\n" +
+                        "FROM sales s\n" + 
+                        "JOIN vehicles v ON s.vin = v.vin\n" +
+                        "JOIN dealers d ON s.dealerID = d.dealerID\n" +
+                        "WHERE v.dateAcquired IS NOT NULL\n";
+
+                    // not done yet, we'll append the join here based on model name entered by user
+                    if (filterByModel) {
+                        // forgot to escape single quotes again
+                        specificModel = specificModel.replace("'", "''");
+                        // "WHERE ... AND v.model = specificModel" should filter correctly
+                        sqlQuery = sqlQuery + "AND v.model = '" + specificModel + "'\n";
+                    }
+
+                    // now to group by dealer and order by our aliased AVG date difference
+                    sqlQuery = sqlQuery +
+                        "GROUP BY d.dealerID, d.name\n" +
+                        "ORDER BY avgDaysInInventory DESC;";
+
+                    String queryResult = execute(sqlQuery);
+                    showTextBox(queryResult);
+                }
+                catch (SQLException e) {
+                    showTextBox("SQL Error: " + e.getMessage());
+                }
             } else if(selection == 5) {
                 //break;
             } else {
@@ -261,8 +435,13 @@ public class main {
             connect();
             createTablesIfNotExists();
 
+            // testing
+            String answer = getInput("Test: type anything");
+            System.out.println("You typed: " + answer);
+
+            // had trouble getting this to compile on my end, just going to use the old method
             showOptionsAndGetSelectedForever();
-            
+            // getSQLFromInputForever();
         } catch (SQLException e) {
             System.out.println("Connection or setup error: " + e.getMessage());
             e.printStackTrace();
