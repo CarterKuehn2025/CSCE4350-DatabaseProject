@@ -8,8 +8,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Scanner;
 
-import com.sun.source.tree.TryTree;
-
 public class main {
 
     private static Connection conn;
@@ -273,15 +271,15 @@ public class main {
     }
 
 
-    public static String getPassword() {
+    public static String getPassword(String description) {
         String escapeChars = description.replace("\"", "\\\"");
         try {
-            path tempFile = Files.createTempFile("whiptail_pass_", ".txt");
+            Path tempFile = Files.createTempFile("whiptail_pass_", ".txt");
 
             StringBuilder cmd = new StringBuilder();
             cmd.append("(whiptail --title \"Password\" --passwordbox \"")
             .append(escapeChars)
-            .append("\" 10 60 3>&1 1>&2 2>&3 > ");
+            .append("\" 10 60 3>&1 1>&2 2>&3 > ")
             .append(tempFile.toAbsolutePath());
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd.toString());
