@@ -277,9 +277,10 @@ public class main {
             Path tempFile = Files.createTempFile("whiptail_pass_", ".txt");
 
             StringBuilder cmd = new StringBuilder();
-            cmd.append("(whiptail --title \"Password\" --passwordbox \"")
+            cmd.append("(whiptail --title \"Password\" --passwordbox \"")    // Hides the text input
             .append(escapeChars)
-            .append("\" 10 60 3>&1 1>&2 2>&3 > ")
+            .append("\" 10 60 3>&1 1>&2 2>&3")
+            .append(") > ")
             .append(tempFile.toAbsolutePath());
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd.toString());
