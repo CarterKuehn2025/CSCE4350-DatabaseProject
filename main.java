@@ -1,6 +1,7 @@
 import java.nio.file.*;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -8,6 +9,7 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.PreparedStatement;
 import java.util.Scanner;
 
 public class main {
@@ -271,6 +273,163 @@ public class main {
             return "";
         }
     }
+        // main driver behind CSV read -> write to table
+    // need to specify that it can throw an I/O or SQL exception to receive clear error messages
+    public static int importCSV(String tableName, String csvPath, boolean clearFirst) throws IOException, SQLException {
+        // basic file open -> buffered reader
+        Path filePath = Paths.get(csvPath);
+        if (!Files.exists(filePath)) {
+            // custom IOException
+            throw new IOException("CSV file does not exist: " + csvPath);
+        }
+
+        try (BufferedReader BuffReader = Files.newBufferedReader(filePath)) {
+            // !!! - function assume csv is formatted as:
+            //     1st line: header containing column names for example ("vin,color,engineType,timeKept,dateAcquired,dealerID,...,")
+            //     2nd line+ : body containing row entries
+            
+            // first, grab header
+            String headerLine = BuffReader.readLine();
+            if (headerLine == null) {
+                throw new IOException("CSV file is empty: " + csvPath);
+            }
+
+            // now split the column names apart using the ',' as our delimiter
+            // assumes no commas inside of fields (otherwise change to escape the commas)
+            String[] columnNames = headerLine.split(",");
+            // iterate across the length of our array
+            for (int i = 0; i < columnNames.length; i++ ) {
+                // and trim potential whitespace
+                columnNames[i] = columnNames[i].trim();
+            }
+
+            // check user option to clear existing data/table
+            if (clearFirst) {
+                // simple DELETE FROM sql
+                try (Statement stmt = conn.createStatement()) {
+                    String deleteTable = "DELETE FROM " + tableName;
+                    stmt.executeUpdate(deleteTable);
+                }
+            }
+
+            // now for the fun part
+            // first the INSERT statement built using header columns
+            // string builder simplifies this process thankfully
+            StringBuilder sqlInsert = new StringBuilder();
+            sqlInsert.append("INSERT INTO ").append(tableName).append(" (");            // "INSERT INTO TABLE"
+            // iterate over column names from header line
+            for (int i = 0; i < columnNames.length; i++) {
+                if(i > 0) {
+                    // should build "INSERT INTO TABLE (name, age, address, ...)"
+                    sqlInsert.append(", ");
+                }
+                sqlInsert.append(columnNames[i]);
+            }
+            // now values
+            sqlInsert.append(") VALUES (");
+            for (int i = 0; i < columnNames.length; i++) {
+                if (i > 0) {
+                    sqlInsert.append(", ");
+                }
+                sqlInsert.append("?");
+            }
+            sqlInsert.append(")");
+
+            String insertSQL = sqlInsert.toString();
+
+            // barebones SQL string has been made, now to dynamically build the query
+            // to count rows
+            int totalInserted = 0;
+            // prepared statement gives us options for editing
+            try (PreparedStatement prepStatment = conn.prepareStatement(insertSQL)) {
+                String line;
+                // to track size/maybe limit
+                int batchSize = 0;
+                final int BATCHLIMIT = 500; // random high number
+
+                // now to read each "row" (line)
+                while ((line = BuffReader.readLine()) != null) {
+                    if (line.trim().isEmpty()) {
+                        continue; // should skip blank lines
+                    }
+
+                    // split the line on commas, -1 will keep empty strings
+                    String[] values = line.split(",", -1);
+                    // breif sanity check
+                    if (values.length != columnNames.length) {
+                        throw new IOException("Column count mismatch in line: " + line);
+                    }
+
+                    // mySQL should handle typing automatically (surprisingly) as long as everything
+                    // is a string, so we'll set everything to a string
+                    for (int i = 0; i < columnNames.length; i++) {
+                        // handles each data entry in a row
+                        prepStatment.setString(i + 1, values[i].trim());
+                    }
+
+                    prepStatment.addBatch();
+                    batchSize++;
+
+                    // basic limiting
+                    if (batchSize >= BATCHLIMIT) {
+                        int[] results = prepStatment.executeBatch();
+                        totalInserted += results.length;
+                        batchSize = 0;
+                    }
+                }
+
+                // flush remaining
+                if (batchSize > 0) {
+                    int[] results = prepStatment.executeBatch();
+                    totalInserted += results.length;
+                }
+            }
+
+            return totalInserted;
+            
+        }
+    }
+
+    // menu to to assemble options for loading data from a csv
+    public static void loadDataCSVMenu() {
+        try {
+            // first, user has to specify table name
+            String tableName = getInput("Enter target table exact name (vehicles, sales, customers):");
+            // basic saftey check
+            if (tableName == null || tableName.trim().isEmpty()) {
+                showTextBox("No table name provided");
+                return;
+            }
+
+            tableName = tableName.trim();
+
+            // next, user has to specify CSV file name, might need to use PATH not sure (in Cell machine file system)
+            String csvPath = getInput("Enter file name of CSV file (ex: vechiles.csv):");
+            if (csvPath == null || csvPath.trim().isEmpty()) {
+                showTextBox("No CSV file name provided, canceling import");
+                return;
+            }
+
+            csvPath = csvPath.trim();
+
+            // ask user if they want to clear the table first, boolean to handle the logic
+            String clearPrompt = getInput("Clear existing rows " + tableName + " before import? (yes/no):");
+            boolean clearFirst = clearPrompt != null && clearPrompt.trim().equalsIgnoreCase("yes");
+
+            // we'll handle the sql query in a different file for readability
+            // I want to tell the user how many rows were added, thus we'll return an int
+            // counting the amount of rows inserted
+            int rowsInserted = importCSV(tableName, csvPath, clearFirst);
+
+            // I'll wrap up this function before building out importCSV
+            showTextBox("Imported " + rowsInserted + "rows into table " + tableName + ".");
+        }
+        catch (Exception e) {
+            // can be I/O based or SQL error
+            e.printStackTrace();
+            showTextBox("Error importing CSV: " + e.getMessage());
+        }
+    }
 
     public static String getPassword(String description) {
         String escapeChars = description.replace("\"", "\\\"");
@@ -312,6 +471,7 @@ public class main {
                     "FIND The top 2 BRANDS by revinue in the past 1 year (can be any number of brands or years).",
                     "FIND the MONTH which has the BEST revenue for a body style (defaults to Convertible).",
                     "FIND the dealers which have the TOP AVERAGE TIME a given VEHICLE model is kept (can be any model).",
+                    "Update data using CSV file.",
                     "exit"
             });
             System.out.println(selection);
@@ -471,7 +631,9 @@ public class main {
                     showTextBox("SQL Error: " + e.getMessage());
                 }
             } else if(selection == 5) {
-                //break;
+                loadDataCSVMenu();
+            } else if (selection == 6) {
+                // break
             } else {
                 System.out.println("Invalid Command");
             }
