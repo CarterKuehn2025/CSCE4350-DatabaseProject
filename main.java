@@ -331,9 +331,48 @@ public class main {
                 } catch (SQLException e) {
                     showTextBox("SQL Error: " + e.getMessage());
                 }
+                
             } else if(selection == 1) {
+                try {
+                    // get user input for the part name
+                    String part = getInput("Enter the part name (i.e. Headlight):");
+                    // Escape the single quotes
+                    part = part.replace("'", "''");
+
+                    String sql =
+                        "SELECT vin, model, suppliedPart\n" + 
+                        "FROM vehicles\n" +
+                        "JOIN companyPlants ON model = forModel\n" +
+                        "WHERE suppliedPart = '" + part + "';";
+
+                        String result = execute(sql);
+                        showTextBox(result);
+                }
+                catch (SQLException e) {
+                    showTextBox("SQL Error: " + e.getMessage());
+                }
 
             } else if(selection == 2) {
+                try {
+                    //Get user input for number of years
+                    int years = Integer.parseInt(getInput("Enter how many years"));
+
+                    String sql =
+                        "SELECT brand, SUM(salePrice) AS totalSales\n" +
+                        "FROM sales\n" +
+                        "JOIN vehicles ON  sales.vin = vehicles.vin\n" +
+                        "JOIN models ON vehicles.model = models.model\n" +
+                        "WHERE saleDate >= CURDATE() - " + years + "\n" +
+                        "GROUP BY brand\n" +
+                        "ORDER BY totalSales DESC\n" +
+                        "LIMIT 2;";
+
+                    String result = execute(sql);
+                    showTextBox(result);
+                }
+                catch (SQLException e) {
+                    showTextBox ("SQL Error: " + e.getMessage());
+                }
 
             } else if(selection == 3) {
                 try {
