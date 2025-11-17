@@ -1,26 +1,24 @@
-import java.nio.file.*;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Scanner;
 
+import com.sun.source.tree.TryTree;
+
 public class main {
 
     private static Connection conn;
-
+    
     // Connect once, globally
     // uses local host bc it is intended to be ran on the cell machines
-    public static void connect() throws SQLException {
+    public static void connect(String user, String password) throws SQLException {
         if (conn == null || conn.isClosed()) {
             String url = "jdbc:mysql://localhost:3306/csce4350_258_team6_proj";
-            String user = "cgk0043";
-            String password = "11563328";
 
             conn = DriverManager.getConnection(url, user, password);
             System.out.println("Connected to database!");
@@ -274,6 +272,38 @@ public class main {
         }
     }
 
+
+    public static String getPassword() {
+        String escapeChars = description.replace("\"", "\\\"");
+        try {
+            path tempFile = Files.createTempFile("whiptail_pass_", ".txt");
+
+            StringBuilder cmd = new StringBuilder();
+            cmd.append("(whiptail --title \"Password\" --passwordbox \"")
+            .append(escapeChars)
+            .append("\" 10 60 3>&1 1>&2 2>&3 > ");
+            .append(tempFile.toAbsolutePath());
+
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd.toString());
+            pb.inheritIO();
+            Process process = pb.start();
+            int exitCode = process.waitFor();
+
+            String result = "";
+            if (exitCode == 0) {
+                result = Files.readString(tempFile).trim();
+            }
+
+            Files.deleteIfExists(tempFile);
+            return result;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "";
+        }
+    }
+
+
     public static void showOptionsAndGetSelectedForever() {
         Scanner scanner = new Scanner(System.in);
         //while (true) { // only do one iteration of selection so that the printed stuff can be seen for debugging
@@ -432,7 +462,11 @@ public class main {
 
     public static void main(String[] args) {
         try {
-            connect();
+
+            String user = getInput("EUID: ");
+            String password = getPassword("Password: ");
+
+            connect(user, password);
             createTablesIfNotExists();
 
             // testing
