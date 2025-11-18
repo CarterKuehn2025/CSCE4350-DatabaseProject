@@ -668,8 +668,14 @@ public class main {
             showOptionsAndGetSelectedForever();
             // getSQLFromInputForever();
         } catch (SQLException e) {
-            System.out.println("Connection or setup error: " + e.getMessage());
-            e.printStackTrace();
+            if (e.getMessage().startsWith("No suitable driver found for")) {
+                System.out.println("Error, make sure you're running with including the driver:\njava -cp \".:mysql-connector-j-8.4.0/mysql-connector-j-8.4.0.jar\" main");
+            } else if (e.getMessage().startsWith("Communications link failure")) {
+                System.out.println("Error, incorrect password or you're not running in the cell machine CELLDB-CSE.ENG.UNT.ED");
+            } else {
+                System.out.println("Connection or setup error: " + e.getMessage());
+                e.printStackTrace();
+            }
         } finally {
             try {
                 if (conn != null && !conn.isClosed()) {
