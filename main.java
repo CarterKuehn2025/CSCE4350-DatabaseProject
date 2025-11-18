@@ -654,7 +654,7 @@ public class main {
             
             String user = getInput("EUID: ");
             if(user.isEmpty()) return;
-            String password = getPassword("Password: ");
+            String password = getPassword("Your 8-digit UNT ID Number: ");
             if(password.isEmpty()) return;
             
             connect(user, password);
