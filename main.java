@@ -170,10 +170,11 @@ public class main {
                 
                 String result = Files.readString(tempFile).trim();
                 if(!result.isEmpty()) return Integer.parseInt(result) - 1;
+                else return -1;
         } catch (Exception e) {
             e.printStackTrace();
+            return -1;
         }
-        return -1;
     }
 
     public static void showTextBox(String text) {
@@ -258,7 +259,7 @@ public class main {
             // check if user pressed ok (returns 0)
             String result = "";
             if(exitCode == 0) {
-                result = Files.readString(tempFile).trim();
+                result = Files.readString(tempFile);
             }
 
             // don't save file
@@ -266,7 +267,7 @@ public class main {
 
             // return user input
             // yay so fun java
-            return result;
+            return result.trim();
         }
         catch (Exception e) {
             e.printStackTrace();
@@ -396,25 +397,21 @@ public class main {
             // first, user has to specify table name
             String tableName = getInput("Enter target table exact name (vehicles, sales, customers):");
             // basic saftey check
-            if (tableName == null || tableName.trim().isEmpty()) {
+            if (tableName.isEmpty()) {
                 showTextBox("No table name provided");
                 return;
             }
 
-            tableName = tableName.trim();
-
             // next, user has to specify CSV file name, might need to use PATH not sure (in Cell machine file system)
             String csvPath = getInput("Enter file name of CSV file (ex: vechiles.csv):");
-            if (csvPath == null || csvPath.trim().isEmpty()) {
+            if (csvPath.isEmpty()) {
                 showTextBox("No CSV file name provided, canceling import");
                 return;
             }
 
-            csvPath = csvPath.trim();
-
             // ask user if they want to clear the table first, boolean to handle the logic
             String clearPrompt = getInput("Clear existing rows " + tableName + " before import? (yes/no):");
-            boolean clearFirst = clearPrompt != null && clearPrompt.trim().equalsIgnoreCase("yes");
+            boolean clearFirst = clearPrompt.equalsIgnoreCase("yes");
 
             // we'll handle the sql query in a different file for readability
             // I want to tell the user how many rows were added, thus we'll return an int
@@ -450,11 +447,11 @@ public class main {
 
             String result = "";
             if (exitCode == 0) {
-                result = Files.readString(tempFile).trim();
+                result = Files.readString(tempFile);
             }
 
             Files.deleteIfExists(tempFile);
-            return result;
+            return result.trim();
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -539,12 +536,8 @@ public class main {
                     // get user input for body style to query for
                     String bodyStyle = getInput("Enter vehicle body style (i.e. Convertible):");
                     // default to convertible
-                    if (bodyStyle == null || bodyStyle.trim().isEmpty()) {
+                    if (bodyStyle.isEmpty()) {
                         bodyStyle = "Convertible";
-                    }
-                    else {
-                        // clean whitespace from user
-                        bodyStyle = bodyStyle.trim();
                     }
 
                     // bug fix, need to escape the single quotes otherwise SQL string is broken
@@ -584,11 +577,7 @@ public class main {
                     // need to allow for an optional filter, same getInput process for user
                     String specificModel = getInput("Enter vehicle MODEL to filter by (exact name), or blank for all models:");
                     // can still use bool logic similar to python, java just requires more method calls
-                    boolean filterByModel = specificModel != null && !specificModel.trim().isEmpty();
-                    if (filterByModel) {
-                        // user entered a model name, trim possible whitespace
-                        specificModel = specificModel.trim();
-                    }
+                    boolean filterByModel = !specificModel.isEmpty();
 
                     // same query assembly method for selection 3
                     // notes:
@@ -671,7 +660,7 @@ public class main {
             connect(user, password);
             createTablesIfNotExists();
 
-            // testing
+            // testing (won't be ran because of the previous function
             String answer = getInput("Test: type anything");
             System.out.println("You typed: " + answer);
 
