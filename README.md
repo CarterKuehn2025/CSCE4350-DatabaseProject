@@ -15,6 +15,6 @@ ER diagram [link](https://dbdiagram.io/d/Copy-of-Untitled-Diagram-6909529d6735e1
 4. Run w/ Connector.jar file:
 `java -cp ".:mysql-connector-j-8.4.0/mysql-connector-j-8.4.0.jar" main`
 
-5. Input UNT EUID and profile ID found on homescreen of myUNT
+5. Input UNT EUID, then your 8-digit UNT ID found on homescreen of myUNT
  
 6. Select the query by moving with the arrow keys and pressing enter.
