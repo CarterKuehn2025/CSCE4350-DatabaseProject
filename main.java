@@ -664,7 +664,9 @@ public class main {
         try {
             
             String user = getInput("EUID: ");
+            if(user.isEmpty()) return;
             String password = getPassword("Password: ");
+            if(password.isEmpty()) return;
             
             connect(user, password);
             createTablesIfNotExists();
