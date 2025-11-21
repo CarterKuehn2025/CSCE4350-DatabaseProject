@@ -2,7 +2,7 @@
 Automobile Company requires a major redesign of their database system. 
 
 ## Diagram
-ER diagram [link](https://dbdiagram.io/d/Copy-of-Untitled-Diagram-6909529d6735e1117011a0b8)
+ER diagram [link](https://dbdiagram.io/d/691ff550228c5bbc1ada7333)
 
 ## How to use
 1. Login to UNT's database cell machine using host name: "CELLDB-CSE.ENG.UNT.EDU" w/ normal login credentials using Putty + WinSCP
