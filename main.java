@@ -11,6 +11,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.PreparedStatement;
 import java.util.Scanner;
+import java.util.List;
+import java.util.ArrayList;
 
 public class main {
 
@@ -182,7 +184,7 @@ public class main {
             Path tempFile = Files.createTempFile("whiptail_output_", ".txt");
             Files.writeString(tempFile, text); // preserves newlines and special chars
 
-            String cmd = "whiptail --title 'Output' --textbox " + tempFile.toAbsolutePath() + " 20 80";
+            String cmd = "whiptail --title 'Output' --textbox " + tempFile.toAbsolutePath() + " 20 120";
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd);
             pb.inheritIO(); // show menu interactively
             Process process = pb.start();
@@ -194,6 +196,83 @@ public class main {
     }
 
     // This just executes the string as SQL and returns the output. We can just make functions that use this funtion.
+    // refactoring to pretty up the display
+    public static String execute(String sql) throws SQLException {
+        // going to try and pretty up the formatting using some java indexing length strategies
+        try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            // grab the meta data, we can use it to format the results
+            // automatically returned when a query is processed as long as we capture in a result set
+            ResultSetMetaData metaData = rs.getMetaData();
+            int columnCount = metaData.getColumnCount();
+
+            // first, grab all rows (yes including header)
+            List<String[]> rows = new ArrayList<>();
+
+            // handle header row first
+            String[] header = new String[columnCount];
+            // iterate across the column count
+            for(int i = 1; i <= columnCount; i++ ) {
+                // 0 indexing
+                header[i - 1] = metaData.getColumnLabel(i);
+            }
+            rows.add(header);
+
+            // now for data rows
+            while (rs.next()) {
+                String[] row = new String[columnCount];
+                // walk along
+                for (int i = 1; i <= columnCount; i++) {
+                    // grab the value
+                    String value = rs.getString(i);
+                    // add it to the @ index, little guard check for null values
+                    row[i - 1] = (value == null ? "NULL" : value);
+                }
+                rows.add(row);
+            }
+
+            // now we need the max width for each column (aka header + data)
+            int[] widths = new int[columnCount];
+            for (String[] row : rows) {
+                for (int c = 0; c < columnCount; c++) {
+                    int length = row[c] != null ? row[c].length() : 0;
+                    if (length > widths[c]) {
+                        widths[c] = length;
+                    }
+                }
+            }
+
+            // now for string builder, yay android development use case here
+            StringBuilder stringBuild = new StringBuilder();
+
+            // allows for easier formatting, first iterate over each row
+            for (int r = 0; r < rows.size(); r++) {
+                String[] row = rows.get(r);
+
+                // now we need to iterate across the columns and add padding to its max width + maybe 2 spaces??
+                for (int c = 0; c < columnCount; c++) {
+                    stringBuild.append(String.format("%-" + (widths[c] + 2) + "s", row[c]));
+                }
+                // move to next row
+                stringBuild.append("\n");
+
+                // for user display, I want to add a seperator '-' after the header row
+                if (r == 0) {
+                    // we'll walk the columns and append singletons based on the width
+                    for (int c = 0; c < columnCount; c++) {
+                        for (int i = 0; i < widths[c] + 2; i++) {
+                            stringBuild.append("-");
+                        }
+                    }
+                    // again new line to move into another row
+                    stringBuild.append("\n");
+                }
+            }
+
+            return stringBuild.toString();
+        }
+    }
+
+/*    // old version
     public static String execute(String sql) throws SQLException {
         try (Statement stmt = conn.createStatement()) {
             String trimmed = sql.trim().toUpperCase();
@@ -229,6 +308,7 @@ public class main {
             }
         }
     }
+*/ 
 
     public static String getInput(String description) {
         // implementing todo
@@ -459,20 +539,227 @@ public class main {
         }
     }
 
+    // dealer portal generation/SQL queries
+    public static void showDealerPortal() {
+        String dealerID = getInput("Please enter your dealer ID (i.e: D001):");
+        // check for null value
+        if (dealerID == null || dealerID.trim().isEmpty()) {
+            showTextBox("No dealer ID entered; exiting to main menu.");
+            return;
+        }
+
+        // escape any possible single quotes to prevent problems
+        dealerID = dealerID.trim();
+        String dealerIDEsc = dealerID.replace("'", "''");
+        dealerIDEsc = "'" + dealerIDEsc + "'";
+
+        while (true) {
+            int selection = showMenuAndGetSelection("Dealer Portal - choose an option:", new String[] {
+                "View my current inventory",
+                "View vehicles I sold recently",
+                "See my average inventory time per model",
+                "Exit dealer portal"
+            });
+            if(selection == 0) {
+                // need to find cars owned by the dealer and not yet sold
+                // grab most values from vehicles, we'll join on model and brand (model and brand)
+                // left join on sales using the vin should allow us to check if it is null aka not sold
+                String sql = "SELECT\n" +
+                "v.vin, b.brand, m.model, m.bodyStyle, v.color, v.engineType, v.dateAcquired, v.salePrice\n" +
+                "FROM vehicles v\n" +
+                "JOIN models m ON v.model = m.model\n" +
+                "JOIN brands b ON m.brand = b.brand\n" + 
+                "LEFT JOIN sales s ON v.vin = s.vin\n" +
+                "WHERE v.dealerID = " + dealerIDEsc + "\n" +
+                "AND s.vin IS NULL;";
+
+                try {
+                    // execute command
+                    String result = execute(sql);
+                    showTextBox(result);
+                }
+                catch (SQLException e) {
+                    showTextBox("SQL Error: " + e.getMessage());
+                }
+            }
+            else if(selection == 1) {
+                // want to allow the dealer to view vehicles they have solid in the last 90 days
+                // base table will be sales, but we want the sale listed to contain the vin (vehicles)
+                // brand (brands), model (models), customer name (customers), thus we will join on all these
+                // tables
+                // then use date subtraction against the current date and SQL 90 day interval (and a order by descending)
+                String sql = "SELECT\n" +
+                "s.saleDate, v.vin, b.brand, m.model, c.name AS customerName, s.salePrice\n" +
+                "FROM sales s\n" +
+                "JOIN vehicles v ON s.vin = v.vin\n" +
+                "JOIN models m ON v.model = m.model\n" +
+                "JOIN brands b ON m.brand = b.brand\n" +
+                "JOIN customers c ON s.customerID = c.customerID\n" +
+                "WHERE s.dealerID = " + dealerIDEsc + "\n" +
+                "AND s.saleDate >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)\n" +
+                "ORDER BY s.saleDate DESC;";
+                
+                try {
+                    String result = execute(sql);
+                    showTextBox(result);
+                }
+                catch (SQLException e) {
+                    showTextBox("SQL Error: " + e.getMessage());
+                }
+            }
+            else if(selection == 2) {
+                // want to allow specific dealer to see their "average time kept" per model
+                // base table will again be sales, and we need model (models), vin (vehicles)
+                // only "slightly" complex part is taking the AVG of the date difference between the sale date and the date the vehicle was aquired
+                String sql = "SELECT\n" +
+                "m.model, AVG(DATEDIFF(s.saleDate, v.dateAcquired)) AS avgDaysInInventory, COUNT(*) AS vehiclesSold\n" +
+                "FROM sales s\n" +
+                "JOIN vehicles v ON s.vin = v.vin\n" +
+                "JOIN models m ON v.model = m.model\n" +
+                "WHERE s.dealerID = " + dealerIDEsc + "\n" +
+                "AND v.dateAcquired IS NOT NULL\n" +
+                "GROUP BY m.model\n" +
+                "ORDER BY avgDaysInInventory DESC;";
+
+                try {
+                    String result = execute(sql);
+                    showTextBox(result);
+                }
+                catch (SQLException e) {
+                    showTextBox("SQL Error: " + e.getMessage());
+                }
+            }
+            else if(selection == 3) {
+                // return to menu
+                break;
+            }
+            else {
+                showTextBox("Invalid selection.");
+            }
+        }
+    }
+
+    public static void showCustomerPortal() {
+        while (true) {
+            int selection = showMenuAndGetSelection("Customer portal - choose an option:", new String[] {
+                "Browse Brands",
+                "Browse models for a brand",
+                "View all available vehicles",
+                "Exit customer portal"
+            });
+            if(selection == 0) {
+                // simple grab all brands from brands table and order alphabetically
+                String sql = "SELECT\n" +
+                    "brand\n" +
+                    "FROM brands\n" +
+                    "ORDER BY brand;";
+
+                try {
+                    // execute command
+                    String result = execute(sql);
+                    showTextBox(result);
+                }
+                catch (SQLException e) {
+                    showTextBox("SQL Error: " + e.getMessage());
+                }
+            }
+            else if(selection == 1) {
+                // want to allow the user to browse models for a brand
+                // first, user input
+                String brand = getInput("Enter brand name (ex: Toyota):");
+                if (brand == null || brand.trim().isEmpty()) {
+                    showTextBox("No brand entered. Returning to customer menu.");
+                    continue;
+                }
+
+                // we'll trim, escape and append quotes
+                brand = brand.trim();
+                String brandEsc = brand.replace("'", "''");
+                brandEsc = "'" + brandEsc + "'";
+
+                // for the query, we only need the models table
+                // and need to use WHERE to find where the user selected brand matches any models with that brand
+                String sql = "SELECT\n" + 
+                    "m.model, m.bodyStyle\n" +
+                    "FROM models m\n" +
+                    "WHERE m.brand = " + brandEsc + "\n" +
+                    "ORDER BY m.model;";
+                
+                try {
+                    String result = execute(sql);
+                    showTextBox(result);
+                }
+                catch (SQLException e) {
+                    showTextBox("SQL Error: " + e.getMessage());
+                }
+            }
+            else if(selection == 2) {
+                // want to allow the customer to view all available (unsold) vehicles
+                // base table will be vehicles, but we the user to see vin, brand (brands), model bodyStyle (models), color, engineType, salePrice
+                // and we only want available, so any vins listed within sales are sold, and not available
+                // thus we'll join all those tables on vehicles, and I think a left join of sales where the VIN is null will ensure we get all instances
+                String sql = "SELECT\n" +
+                    "v.vin, b.brand, m.model, m.bodyStyle, v.color, v.engineType, v.salePrice\n" +
+                    "FROM vehicles v\n" +
+                    "JOIN models m ON v.model = m.model\n" +
+                    "JOIN brands b ON m.brand = b.brand\n" +
+                    "LEFT JOIN sales s ON v.vin = s.vin\n" +
+                    "WHERE s.vin IS NULL\n" +
+                    "ORDER BY b.brand, m.model, v.salePrice;";
+
+                try {
+                    String result = execute(sql);
+                    showTextBox(result);
+                }
+                catch (SQLException e) {
+                    showTextBox("SQL Error: " + e.getMessage());
+                }
+            }
+            else if(selection == 3) {
+                // return to menu
+                break;
+            }
+            else {
+                showTextBox("Invalid selection.");
+            }
+        }
+    }
+
     public static void showOptionsAndGetSelectedForever() {
         Scanner scanner = new Scanner(System.in);
-        //while (true) { // only do one iteration of selection so that the printed stuff can be seen for debugging
+        while (true) { // only do one iteration of selection so that the printed stuff can be seen for debugging
             int selection = showMenuAndGetSelection("Select which command would like to do:", new String[] { 
+                "Dealer portal",
+                "Customer portal",
+                "NOT IMPLEMENTED Marketing portal - Currently returns all sales",
                 "Show SALES TRENDS by brand over the past N years, given by year, month, week, gender, and income range",
-                    "FIND VIN numbers for cars which were made with a given PART 2.0L Engine (can be any part).",
-                    "FIND The top 2 BRANDS by revinue in the past 1 year (can be any number of brands or years).",
-                    "FIND the MONTH which has the BEST revenue for a body style (defaults to Convertible).",
-                    "FIND the dealers which have the TOP AVERAGE TIME a given VEHICLE model is kept (can be any model).",
-                    "Update data using CSV file.",
-                    "exit"
+                "FIND VIN numbers for cars which were made with a given PART 2.0L Engine (can be any part).",
+                "FIND The top 2 BRANDS by revinue in the past 1 year (can be any number of brands or years).",
+                "FIND the MONTH which has the BEST revenue for a body style (defaults to Convertible).",
+                "FIND the dealers which have the TOP AVERAGE TIME a given VEHICLE model is kept (can be any model).",
+                "Update data using CSV file.",
+                "exit"
             });
             System.out.println(selection);
             if(selection == 0) {
+                showDealerPortal();
+            }
+            else if(selection == 1) {
+                showCustomerPortal();
+            }
+            else if(selection == 2) {
+                // needs marketing portal
+                String sql = "SELECT * FROM sales";
+                
+                try {
+                   String result = execute(sql);
+                   showTextBox(result);
+                }
+                catch (SQLException e) { 
+                    showTextBox("SQL Error: " + e.getMessage());
+                }
+            }
+            else if(selection == 3) {
                 try {
                     int years = Integer.parseInt(getInput("Enter how many years"));
                     String result = execute(String.format(String.join("\n",
@@ -489,7 +776,7 @@ public class main {
                     showTextBox("SQL Error: " + e.getMessage());
                 }
                 
-            } else if(selection == 1) {
+            } else if(selection == 4) {
                 try {
                     // get user input for the part name
                     String part = getInput("Enter the part name (i.e. Headlight):");
@@ -509,7 +796,7 @@ public class main {
                     showTextBox("SQL Error: " + e.getMessage());
                 }
 
-            } else if(selection == 2) {
+            } else if(selection == 5) {
                 try {
                     //Get user input for number of years
                     int years = Integer.parseInt(getInput("Enter how many years"));
@@ -531,7 +818,7 @@ public class main {
                     showTextBox ("SQL Error: " + e.getMessage());
                 }
 
-            } else if(selection == 3) {
+            } else if(selection == 6) {
                 try {
                     // get user input for body style to query for
                     String bodyStyle = getInput("Enter vehicle body style (i.e. Convertible):");
@@ -572,7 +859,7 @@ public class main {
                     showTextBox("SQL Error: " + e.getMessage());
                 }
 
-            } else if(selection == 4) {
+            } else if(selection == 7) {
                 try {
                     // need to allow for an optional filter, same getInput process for user
                     String specificModel = getInput("Enter vehicle MODEL to filter by (exact name), or blank for all models:");
@@ -619,15 +906,15 @@ public class main {
                 catch (SQLException e) {
                     showTextBox("SQL Error: " + e.getMessage());
                 }
-            } else if(selection == 5) {
+            } else if(selection == 8) {
                 loadDataCSVMenu();
-            } else if (selection == 6) {
-                // break
+            } else if (selection == 9) {
+                break;
             } else {
                 System.out.println("Invalid Command");
             }
 
-        //}
+        }
     }
 
     // this is just for testing, we wouldn't remove this and put options to select custom queries
