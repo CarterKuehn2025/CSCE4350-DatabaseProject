@@ -153,29 +153,37 @@ public class main {
         }
     }
 
-    public static int showMenuAndGetSelection(String text, String[] options) {
+    public static int showMenuAndGetSelection(String title, String[] options) {
+        Path tempFile = null;
         try {
-            Path tempFile = Files.createTempFile("whiptail_choice_", ".txt");
-                StringBuilder cmd = new StringBuilder();
-                cmd.append("(");
-                cmd.append("whiptail --title 'Select Query' --menu 'Pick an option:' 15 120 6 ");
-                for (int i = 0; i < options.length; i++) {
-                    cmd.append("\"").append(i + 1).append("\" \"").append(options[i]).append("\" ");
-                }
-                cmd.append("3>&1 1>&2 2>&3");
-                cmd.append(") > ").append(tempFile.toAbsolutePath());
-                
-                ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd.toString());
-                pb.inheritIO();
-                Process process = pb.start();
-                process.waitFor();
-                
-                String result = Files.readString(tempFile).trim();
-                if(!result.isEmpty()) return Integer.parseInt(result) - 1;
-                else return -1;
+            tempFile = Files.createTempFile("whiptail_choice_", ".txt");
+
+            StringBuilder cmd = new StringBuilder();
+            cmd.append("(");
+            cmd.append("whiptail --title '" + title + "' --menu 'Pick an option:' 15 120 6 --ok-button 'Choose' --cancel-button 'Back' ");
+            for (int i = 0; i < options.length; i++) {
+                cmd.append("\"").append(i + 1).append("\" \"").append(options[i]).append("\" ");
+            }
+            cmd.append("3>&1 1>&2 2>&3");
+            cmd.append(") > ").append(tempFile.toAbsolutePath());
+            
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd.toString());
+            pb.inheritIO();
+            Process process = pb.start();
+            int exitCode = process.waitFor();
+            
+            if(exitCode == 1) return -2; // They clicked 'Back'
+
+            String result = Files.readString(tempFile).trim();
+            if(!result.isEmpty()) return Integer.parseInt(result) - 1;
+            else return -1;
         } catch (Exception e) {
             e.printStackTrace();
             return -1;
+        } finally {
+            if (tempFile != null) {
+                try {Files.deleteIfExists(tempFile); } catch(Exception ignored) {}
+            }
         }
     }
 
@@ -554,11 +562,10 @@ public class main {
         dealerIDEsc = "'" + dealerIDEsc + "'";
 
         while (true) {
-            int selection = showMenuAndGetSelection("Dealer Portal - choose an option:", new String[] {
+            int selection = showMenuAndGetSelection("Dealer Portal", new String[] {
                 "View my current inventory",
                 "View vehicles I sold recently",
-                "See my average inventory time per model",
-                "Exit dealer portal"
+                "See my average inventory time per model"
             });
             if(selection == 0) {
                 // need to find cars owned by the dealer and not yet sold
@@ -629,7 +636,7 @@ public class main {
                     showTextBox("SQL Error: " + e.getMessage());
                 }
             }
-            else if(selection == 3) {
+            else if(selection == -2) { // back button
                 // return to menu
                 break;
             }
@@ -641,11 +648,10 @@ public class main {
 
     public static void showCustomerPortal() {
         while (true) {
-            int selection = showMenuAndGetSelection("Customer portal - choose an option:", new String[] {
-                "Browse Brands",
-                "Browse models for a brand",
-                "View all available vehicles",
-                "Exit customer portal"
+            int selection = showMenuAndGetSelection("Customer portal", new String[] {
+                "Show all brands",
+                "Show all models for a given brand",
+                "View all vehicles for sale"
             });
             if(selection == 0) {
                 // simple grab all brands from brands table and order alphabetically
@@ -666,7 +672,7 @@ public class main {
             else if(selection == 1) {
                 // want to allow the user to browse models for a brand
                 // first, user input
-                String brand = getInput("Enter brand name (ex: Toyota):");
+                String brand = getInput("Enter brand name (Get available brands from 'Show all brands', ex: Toyota):");
                 if (brand == null || brand.trim().isEmpty()) {
                     showTextBox("No brand entered. Returning to customer menu.");
                     continue;
@@ -715,7 +721,7 @@ public class main {
                     showTextBox("SQL Error: " + e.getMessage());
                 }
             }
-            else if(selection == 3) {
+            else if(selection == -2) { // back button
                 // return to menu
                 break;
             }
@@ -725,41 +731,81 @@ public class main {
         }
     }
 
-    public static void showOptionsAndGetSelectedForever() {
-        Scanner scanner = new Scanner(System.in);
-        while (true) { // only do one iteration of selection so that the printed stuff can be seen for debugging
-            int selection = showMenuAndGetSelection("Select which command would like to do:", new String[] { 
-                "Dealer portal",
-                "Customer portal",
-                "NOT IMPLEMENTED Marketing portal - Currently returns all sales",
+    public static void showMarketingPortal() {
+        while (true) {
+            int selection = showMenuAndGetSelection("Marketing portal", new String[] {
+                "Show all sales"
+            });
+            if(selection == 0) {
+                // simple grab all brands from brands table and order alphabetically
+                String sql = "SELECT\n" +
+                    "*\n" +
+                    "FROM sales\n";
+
+                try {
+                    // execute command
+                    String result = execute(sql);
+                    showTextBox(result);
+                }
+                catch (SQLException e) {
+                    showTextBox("SQL Error: " + e.getMessage());
+                }
+            }
+            else if(selection == -2) { // back button
+                // return to menu
+                break;
+            }
+            else {
+                showTextBox("Invalid selection.");
+            }
+        }
+    }
+    
+    public static void showAdminPortal() {
+        while (true) {
+            int selection = showMenuAndGetSelection("Admin portal", new String[] {
+                "Enter SQL command/query",
+                "Import data from CSV"
+            });
+            if(selection == 0) {
+                String sql = getInput("Enter command");
+                if (sql == null || sql.trim().isEmpty()) {
+                    showTextBox("No command entered. Returning to admin menu.");
+                    continue;
+                }
+
+                try {
+                    // execute command
+                    String result = execute(sql);
+                    showTextBox(result);
+                }
+                catch (SQLException e) {
+                    showTextBox("SQL Error: " + e.getMessage());
+                }
+            }
+            else if(selection == 1) {
+                loadDataCSVMenu();
+            }
+            else if(selection == -2) { // back button
+                // return to menu
+                break;
+            }
+            else {
+                showTextBox("Invalid selection.");
+            }
+        }
+    }
+    
+    public static void showSampleQueries() {
+        while (true) {
+            int selection = showMenuAndGetSelection("Sample queries", new String[] {
                 "Show SALES TRENDS by brand over the past N years, given by year, month, week, gender, and income range",
                 "FIND VIN numbers for cars which were made with a given PART 2.0L Engine (can be any part).",
                 "FIND The top 2 BRANDS by revinue in the past 1 year (can be any number of brands or years).",
                 "FIND the MONTH which has the BEST revenue for a body style (defaults to Convertible).",
-                "FIND the dealers which have the TOP AVERAGE TIME a given VEHICLE model is kept (can be any model).",
-                "Update data using CSV file.",
-                "exit"
+                "FIND the dealers which have the TOP AVERAGE TIME a given VEHICLE model is kept (can be any model)."
             });
-            System.out.println(selection);
             if(selection == 0) {
-                showDealerPortal();
-            }
-            else if(selection == 1) {
-                showCustomerPortal();
-            }
-            else if(selection == 2) {
-                // needs marketing portal
-                String sql = "SELECT * FROM sales";
-                
-                try {
-                   String result = execute(sql);
-                   showTextBox(result);
-                }
-                catch (SQLException e) { 
-                    showTextBox("SQL Error: " + e.getMessage());
-                }
-            }
-            else if(selection == 3) {
                 try {
                     int years = Integer.parseInt(getInput("Enter how many years"));
                     String result = execute(String.format(String.join("\n",
@@ -774,9 +820,11 @@ public class main {
                     showTextBox(result);
                 } catch (SQLException e) {
                     showTextBox("SQL Error: " + e.getMessage());
+                } catch (Exception e) { // will catch if the user doesn't enter a number
+                    break;
                 }
                 
-            } else if(selection == 4) {
+            } else if(selection == 1) {
                 try {
                     // get user input for the part name
                     String part = getInput("Enter the part name (i.e. Headlight):");
@@ -794,9 +842,11 @@ public class main {
                 }
                 catch (SQLException e) {
                     showTextBox("SQL Error: " + e.getMessage());
+                } catch (Exception e) {
+                    break;
                 }
 
-            } else if(selection == 5) {
+            } else if(selection == 2) {
                 try {
                     //Get user input for number of years
                     int years = Integer.parseInt(getInput("Enter how many years"));
@@ -816,9 +866,11 @@ public class main {
                 }
                 catch (SQLException e) {
                     showTextBox ("SQL Error: " + e.getMessage());
+                } catch (Exception e) { // will catch if the user doesn't enter a number
+                    break;
                 }
 
-            } else if(selection == 6) {
+            } else if(selection == 3) {
                 try {
                     // get user input for body style to query for
                     String bodyStyle = getInput("Enter vehicle body style (i.e. Convertible):");
@@ -857,9 +909,11 @@ public class main {
                 }
                 catch (SQLException e) {
                     showTextBox("SQL Error: " + e.getMessage());
+                } catch (Exception e) { // will catch if the user doesn't enter a number
+                    break;
                 }
 
-            } else if(selection == 7) {
+            } else if(selection == 4) {
                 try {
                     // need to allow for an optional filter, same getInput process for user
                     String specificModel = getInput("Enter vehicle MODEL to filter by (exact name), or blank for all models:");
@@ -905,12 +959,50 @@ public class main {
                 }
                 catch (SQLException e) {
                     showTextBox("SQL Error: " + e.getMessage());
+                } catch (Exception e ) {
+                    break;
                 }
-            } else if(selection == 8) {
-                loadDataCSVMenu();
-            } else if (selection == 9) {
+            }
+            else if(selection == -2) { // back button
+                // return to menu
                 break;
-            } else {
+            }
+            else {
+                showTextBox("Invalid selection.");
+            }
+        }
+    }
+
+    public static void showOptionsAndGetSelectedForever() {
+        Scanner scanner = new Scanner(System.in);
+        while (true) { // only do one iteration of selection so that the printed stuff can be seen for debugging
+            int selection = showMenuAndGetSelection("Select which portal you would like to use", new String[] { 
+                "Dealer portal",
+                "Customer portal",
+                "Marketing portal",
+                "Admin portal",
+                "Sample queries"
+            });
+            System.out.println(selection);
+            if(selection == 0) {
+                showDealerPortal();
+            }
+            else if(selection == 1) {
+                showCustomerPortal();
+            }
+            else if(selection == 2) {
+                showMarketingPortal();
+            }
+            else if(selection == 3) {
+                showAdminPortal();
+            }
+            else if(selection == 4) {
+                showSampleQueries();
+            }
+            else if (selection == -2) { // back button
+                break;
+            }
+            else {
                 System.out.println("Invalid Command");
             }
 
@@ -946,10 +1038,6 @@ public class main {
             
             connect(user, password);
             createTablesIfNotExists();
-
-            // testing (won't be ran because of the previous function
-            String answer = getInput("Test: type anything");
-            System.out.println("You typed: " + answer);
 
             // had trouble getting this to compile on my end, just going to use the old method
             showOptionsAndGetSelectedForever();
