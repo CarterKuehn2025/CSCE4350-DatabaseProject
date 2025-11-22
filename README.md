@@ -18,3 +18,6 @@ ER diagram [link](https://dbdiagram.io/d/691ff550228c5bbc1ada7333)
 5. Input UNT EUID, then your 8-digit UNT ID found on homescreen of myUNT
  
 6. Select the query by moving with the arrow keys and pressing enter.
+
+## Note
+The sample queries were all integrated into each relevent portal

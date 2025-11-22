@@ -206,6 +206,7 @@ public class main {
     // This just executes the string as SQL and returns the output. We can just make functions that use this funtion.
     // refactoring to pretty up the display
     public static String execute(String sql) throws SQLException {
+        System.out.println(sql); // Print for debugging
         // going to try and pretty up the formatting using some java indexing length strategies
         try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
             // grab the meta data, we can use it to format the results
@@ -734,21 +735,126 @@ public class main {
     public static void showMarketingPortal() {
         while (true) {
             int selection = showMenuAndGetSelection("Marketing portal", new String[] {
-                "Show all sales"
+                "Show SALES TRENDS by brand over the past N years, given by year, month, week, gender, and income range",
+                "FIND The top M BRANDS by revenue in the past N years",
+                "FIND The top M BRANDS by units sold in the past N years",
+                "FIND the MONTH which has the BEST revenue for a body style (ex Convertible).",
             });
             if(selection == 0) {
-                // simple grab all brands from brands table and order alphabetically
-                String sql = "SELECT\n" +
-                    "*\n" +
-                    "FROM sales\n";
-
                 try {
-                    // execute command
+                    int years = Integer.parseInt(getInput("Enter how many years"));
+                    String sql = "SELECT \n" +
+                        "    b.brand,\n" +
+                        "    YEAR(s.saleDate) AS year,\n" +
+                        "    MONTH(s.saleDate) AS month,\n" +
+                        "    WEEK(s.saleDate) AS week,\n" +
+                        "    c.gender,\n" +
+                        "    FLOOR(c.income / 25000) * 25000 AS incomeRange,\n" +
+                        "    SUM(s.salePrice) AS totalSales\n" +
+                        "FROM sales s\n" +
+                        "JOIN vehicles v ON s.vin = v.vin\n" +
+                        "JOIN models m ON v.model = m.model\n" +
+                        "JOIN brands b ON m.brand = b.brand\n" +
+                        "JOIN customers c ON s.customerID = c.customerID\n" +
+                        "WHERE s.saleDate >= DATE_SUB(CURDATE(), INTERVAL " + years + " YEAR)\n" +
+                        "GROUP BY b.brand, year, month, week, c.gender, incomeRange\n" +
+                        "ORDER BY year DESC, month DESC, week DESC, totalSales DESC;";
+                    String result = execute(sql);
+                    showTextBox(result);
+                } catch (SQLException e) {
+                    showTextBox("SQL Error: " + e.getMessage());
+                } catch (Exception e) { // will catch if the user doesn't enter a number
+                    break;
+                }
+            } else if(selection == 1) {
+                try {
+                    //Get user input for number of years
+                    int brands = Integer.parseInt(getInput("Enter how many brands to show (ex 5)"));
+                    int years = Integer.parseInt(getInput("Enter how many years (ex 5)"));
+
+                    String sql =
+                        "SELECT brand, SUM(sales.salePrice) AS totalSales, COUNT(*) AS UnitsSold\n" +
+                        "FROM sales\n" +
+                        "JOIN vehicles ON  sales.vin = vehicles.vin\n" +
+                        "JOIN models ON vehicles.model = models.model\n" +
+                        "WHERE saleDate >= DATE_SUB(CURDATE(), INTERVAL " + years + " YEAR)\n" +
+                        "GROUP BY brand\n" +
+                        "ORDER BY totalSales DESC\n" +
+                        "LIMIT " + brands + ";";
+
                     String result = execute(sql);
                     showTextBox(result);
                 }
                 catch (SQLException e) {
+                    showTextBox ("SQL Error: " + e.getMessage());
+                } catch (Exception e) { // will catch if the user doesn't enter a number
+                    break;
+                }
+            } else if(selection == 2) {
+                try {
+                    //Get user input for number of years
+                    int brands = Integer.parseInt(getInput("Enter how many brands to show (ex 5)"));
+                    int years = Integer.parseInt(getInput("Enter how many years (ex 5)"));
+
+                    String sql =
+                        "SELECT brand, SUM(sales.salePrice) AS totalSales, COUNT(*) AS UnitsSold\n" +
+                        "FROM sales\n" +
+                        "JOIN vehicles ON  sales.vin = vehicles.vin\n" +
+                        "JOIN models ON vehicles.model = models.model\n" +
+                        "WHERE saleDate >= DATE_SUB(CURDATE(), INTERVAL " + years + " YEAR)\n" +
+                        "GROUP BY brand\n" +
+                        "ORDER BY UnitsSold DESC\n" +
+                        "LIMIT " + brands + ";";
+
+                    String result = execute(sql);
+                    showTextBox(result);
+                }
+                catch (SQLException e) {
+                    showTextBox ("SQL Error: " + e.getMessage());
+                } catch (Exception e) { // will catch if the user doesn't enter a number
+                    break;
+                }
+            } else if(selection == 3) {
+                try {
+                    // get user input for body style to query for
+                    String bodyStyle = getInput("Enter vehicle body style (default: Convertible):");
+                    // default to convertible
+                    if (bodyStyle.isEmpty()) {
+                        bodyStyle = "Convertible";
+                    }
+
+                    // bug fix, need to escape the single quotes otherwise SQL string is broken
+                    bodyStyle = bodyStyle.replace("'", "''");
+
+                    // query builds monthly sales for body style and we'll order by revenue
+                    // notes:
+                    // - learned you can define tables as char singletons, significantly cleans up the query
+                    // - we want sale year/month, units sold, and total sales, three of which are in sales
+                    // - so sales join (inner) on vehicles vin and models join on vehicles?
+                    // - then simple group by sale dates and order by total sales
+                    // - thank god for aliasing 
+                    // - !!! """...""" does not work to make a string, ig cell machines use an older version of java < 15
+                    String sqlQuery = 
+                        "Select\n" +
+                            "YEAR(s.saleDate) AS saleYear,\n" +
+                            "MONTH(s.saleDate) AS saleMonth,\n" +
+                            "COUNT(*) AS unitsSold,\n" +
+                            "SUM(s.salePrice) AS totalSales\n" +
+                        "FROM sales s\n" +
+                        "JOIN vehicles v ON s.vin = v.vin\n" +
+                        "JOIN models m ON v.model = m.model\n" +
+                        "WHERE m.bodyStyle = '" + bodyStyle + "'\n" +
+                        "GROUP BY YEAR(s.saleDate), MONTH(s.saleDate)\n" +
+                        "ORDER BY totalSales DESC;";
+
+                    // get the string
+                    String queryResult = execute(sqlQuery);
+                    showTextBox(queryResult);
+                }
+                catch (SQLException e) {
                     showTextBox("SQL Error: " + e.getMessage());
+                } catch (Exception e) { // will catch if the user doesn't enter a number
+                    break;
                 }
             }
             else if(selection == -2) { // back button
@@ -796,127 +902,45 @@ public class main {
         }
     }
     
-    public static void showSampleQueries() {
+    public static void showAnalystPortal() {
         while (true) {
-            int selection = showMenuAndGetSelection("Sample queries", new String[] {
-                "Show SALES TRENDS by brand over the past N years, given by year, month, week, gender, and income range",
-                "FIND VIN numbers for cars which were made with a given PART 2.0L Engine (can be any part).",
-                "FIND The top 2 BRANDS by revinue in the past 1 year (can be any number of brands or years).",
-                "FIND the MONTH which has the BEST revenue for a body style (defaults to Convertible).",
-                "FIND the dealers which have the TOP AVERAGE TIME a given VEHICLE model is kept (can be any model)."
+            int selection = showMenuAndGetSelection("Analyst Portal", new String[] {
+                "FIND VIN numbers for cars which were made from a given part made in a given plant within a given date range.",
+                "FIND the dealers who keep a given vehicle model in inventory for the longest average time (Can search over all vehicles)."
             });
             if(selection == 0) {
                 try {
-                    int years = Integer.parseInt(getInput("Enter how many years"));
-                    String result = execute(String.format(String.join("\n",
-                                    "SELECT brand, SUM(salePrice) totalSales",
-                                    "FROM vehicles",
-                                    "NATURAL JOIN models",
-                                    "WHERE timeKept <= %d",
-                                    "GROUP BY brand",
-                                    "ORDER BY totalSales;"
-                                    ), years * 365));
-                    System.out.println(result);
-                    showTextBox(result);
-                } catch (SQLException e) {
-                    showTextBox("SQL Error: " + e.getMessage());
-                } catch (Exception e) { // will catch if the user doesn't enter a number
-                    break;
-                }
-                
-            } else if(selection == 1) {
-                try {
                     // get user input for the part name
-                    String part = getInput("Enter the part name (i.e. Headlight):");
+                    String part = getInput("Enter the part name (ex Engine):");
+                    String plant = getInput("Enter the plant name (ex Ford Plant 4):");
+                    String dateRange = getInput("Enter the date range (ex: 2021-01-01 2022-01-01 or leave empty to show from all dates)");
                     // Escape the single quotes
                     part = part.replace("'", "''");
+                    plant = plant.replace("'", "''");
+                    dateRange = dateRange.replace("'", "''");
 
                     String sql =
-                        "SELECT vin, model, suppliedPart\n" + 
+                        "SELECT vin, model, suppliedPart, dateAcquired\n" + 
                         "FROM vehicles\n" +
                         "JOIN companyPlants ON model = forModel\n" +
-                        "WHERE suppliedPart = '" + part + "';";
+                        "WHERE suppliedPart LIKE '" + part + "' AND plant LIKE '" + plant + "'\n";
+                    if(!dateRange.isEmpty() && dateRange.split(" ").length == 2) {
+                        sql += "AND dateAcquired BETWEEN '" + dateRange.split(" ")[0] + "' AND '" + dateRange.split(" ")[1] + "'\n";
+                    }
+                    sql += "ORDER BY dateAcquired;";
 
-                        String result = execute(sql);
-                        showTextBox(result);
+                    String result = execute(sql);
+                    showTextBox(result);
                 }
                 catch (SQLException e) {
                     showTextBox("SQL Error: " + e.getMessage());
                 } catch (Exception e) {
                     break;
                 }
-
-            } else if(selection == 2) {
-                try {
-                    //Get user input for number of years
-                    int years = Integer.parseInt(getInput("Enter how many years"));
-
-                    String sql =
-                        "SELECT brand, SUM(salePrice) AS totalSales\n" +
-                        "FROM sales\n" +
-                        "JOIN vehicles ON  sales.vin = vehicles.vin\n" +
-                        "JOIN models ON vehicles.model = models.model\n" +
-                        "WHERE saleDate >= CURDATE() - " + years + "\n" +
-                        "GROUP BY brand\n" +
-                        "ORDER BY totalSales DESC\n" +
-                        "LIMIT 2;";
-
-                    String result = execute(sql);
-                    showTextBox(result);
-                }
-                catch (SQLException e) {
-                    showTextBox ("SQL Error: " + e.getMessage());
-                } catch (Exception e) { // will catch if the user doesn't enter a number
-                    break;
-                }
-
-            } else if(selection == 3) {
-                try {
-                    // get user input for body style to query for
-                    String bodyStyle = getInput("Enter vehicle body style (i.e. Convertible):");
-                    // default to convertible
-                    if (bodyStyle.isEmpty()) {
-                        bodyStyle = "Convertible";
-                    }
-
-                    // bug fix, need to escape the single quotes otherwise SQL string is broken
-                    bodyStyle = bodyStyle.replace("'", "''");
-
-                    // query builds monthly sales for body style and we'll order by revenue
-                    // notes:
-                    // - learned you can define tables as char singletons, significantly cleans up the query
-                    // - we want sale year/month, units sold, and total sales, three of which are in sales
-                    // - so sales join (inner) on vehicles vin and models join on vehicles?
-                    // - then simple group by sale dates and order by total sales
-                    // - thank god for aliasing 
-                    // - !!! """...""" does not work to make a string, ig cell machines use an older version of java < 15
-                    String sqlQuery = 
-                        "Select\n" +
-                            "YEAR(s.saleDate) AS saleYear,\n" +
-                            "MONTH(s.saleDate) AS saleMonth,\n" +
-                            "COUNT(*) AS unitsSold,\n" +
-                            "SUM(s.salePrice) AS totalSales\n" +
-                        "FROM sales s\n" +
-                        "JOIN vehicles v ON s.vin = v.vin\n" +
-                        "JOIN models m ON v.model = m.model\n" +
-                        "WHERE m.bodyStyle = '" + bodyStyle + "'\n" +
-                        "GROUP BY YEAR(s.saleDate), MONTH(s.saleDate)\n" +
-                        "ORDER BY totalSales DESC;";
-
-                    // get the string
-                    String queryResult = execute(sqlQuery);
-                    showTextBox(queryResult);
-                }
-                catch (SQLException e) {
-                    showTextBox("SQL Error: " + e.getMessage());
-                } catch (Exception e) { // will catch if the user doesn't enter a number
-                    break;
-                }
-
-            } else if(selection == 4) {
+            } else if(selection == 1) {
                 try {
                     // need to allow for an optional filter, same getInput process for user
-                    String specificModel = getInput("Enter vehicle MODEL to filter by (exact name), or blank for all models:");
+                    String specificModel = getInput("Enter vehicle model to filter by (ex: F150), or blank for all models:");
                     // can still use bool logic similar to python, java just requires more method calls
                     boolean filterByModel = !specificModel.isEmpty();
 
@@ -976,12 +1000,12 @@ public class main {
     public static void showOptionsAndGetSelectedForever() {
         Scanner scanner = new Scanner(System.in);
         while (true) { // only do one iteration of selection so that the printed stuff can be seen for debugging
-            int selection = showMenuAndGetSelection("Select which portal you would like to use", new String[] { 
+            int selection = showMenuAndGetSelection("Which portal would you like to use", new String[] { 
                 "Dealer portal",
                 "Customer portal",
                 "Marketing portal",
                 "Admin portal",
-                "Sample queries"
+                "Analyst portal"
             });
             System.out.println(selection);
             if(selection == 0) {
@@ -997,7 +1021,7 @@ public class main {
                 showAdminPortal();
             }
             else if(selection == 4) {
-                showSampleQueries();
+                showAnalystPortal();
             }
             else if (selection == -2) { // back button
                 break;
@@ -1005,7 +1029,6 @@ public class main {
             else {
                 System.out.println("Invalid Command");
             }
-
         }
     }
 
