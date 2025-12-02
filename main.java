@@ -192,7 +192,7 @@ public class main {
             Path tempFile = Files.createTempFile("whiptail_output_", ".txt");
             Files.writeString(tempFile, text); // preserves newlines and special chars
 
-            String cmd = "whiptail --title 'Output' --textbox " + tempFile.toAbsolutePath() + " 20 120";
+            String cmd = "whiptail --title 'Output (" + Files.lines(tempFile).count() + " entries)' --scrolltext --textbox " + tempFile.toAbsolutePath() + " 20 120";
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd);
             pb.inheritIO(); // show menu interactively
             Process process = pb.start();
@@ -604,7 +604,7 @@ public class main {
                 "JOIN brands b ON m.brand = b.brand\n" +
                 "JOIN customers c ON s.customerID = c.customerID\n" +
                 "WHERE s.dealerID = " + dealerIDEsc + "\n" +
-                "AND s.saleDate >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)\n" +
+                "AND s.saleDate >= DATE_SUB(CURDATE(), INTERVAL 5 YEAR)\n" +
                 "ORDER BY s.saleDate DESC;";
                 
                 try {
@@ -745,6 +745,7 @@ public class main {
                     int years = Integer.parseInt(getInput("Enter how many years"));
                     String sql = "SELECT \n" +
                         "    b.brand,\n" +
+			"    m.model,\n" +
                         "    YEAR(s.saleDate) AS year,\n" +
                         "    MONTH(s.saleDate) AS month,\n" +
                         "    WEEK(s.saleDate) AS week,\n" +
@@ -757,7 +758,7 @@ public class main {
                         "JOIN brands b ON m.brand = b.brand\n" +
                         "JOIN customers c ON s.customerID = c.customerID\n" +
                         "WHERE s.saleDate >= DATE_SUB(CURDATE(), INTERVAL " + years + " YEAR)\n" +
-                        "GROUP BY b.brand, year, month, week, c.gender, incomeRange\n" +
+                        "GROUP BY b.brand, m.model, year, month, week, c.gender, incomeRange\n" +
                         "ORDER BY year DESC, month DESC, week DESC, totalSales DESC;";
                     String result = execute(sql);
                     showTextBox(result);
